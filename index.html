@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>我的 AI 工具</title>
+</head>
+<body>
+    <h2>🚀 啟動我的自動化流程</h2>
+    
+    <p>第一步：輸入您的 Gemini API Key</p>
+    <input type="password" id="geminiKey" placeholder="貼上你的 API Key">
+
+    <p>第二步：授權 Google 讀取檔案</p>
+    <button onclick="handleAuthClick()">連結我的 Google Drive</button>
+
+    <p>第三步：確認執行</p>
+    <button id="runBtn" disabled onclick="startN8n()">開始執行</button>
+
+    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <script>
+        let tokenClient;
+        let accessToken = null;
+
+        function gisLoaded() {
+            // 這裡填入你剛剛在 Google 申請的 Client ID
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: '你的_CLIENT_ID_貼在這裡',
+                scope: 'https://www.googleapis.com/auth/drive.readonly',
+                callback: (tokenResponse) => {
+                    accessToken = tokenResponse.access_token;
+                    document.getElementById('runBtn').disabled = false;
+                    alert("Google 授權成功！");
+                },
+            });
+        }
+
+        function handleAuthClick() {
+            tokenClient.requestAccessToken();
+        }
+
+        function startN8n() {
+            const key = document.getElementById('geminiKey').value;
+            
+            // 把資料發送到你的 n8n Webhook
+            fetch('你的_N8N_WEBHOOK_URL', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_gemini_key: key,
+                    google_access_token: accessToken
+                })
+            })
+            .then(res => alert("已發送請求給 n8n！"));
+        }
+    </script>
+</body>
+</html>
