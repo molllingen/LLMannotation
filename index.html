@@ -41,21 +41,21 @@
 
     <div class="step-card" id="card2">
         <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
-        <button id="btn2" onclick="runWorkflow(2, 'analysis')" disabled>執行步驟 2 (請先完成上一步)</button>
+        <button id="btn2" onclick="runWorkflow(2, 'analysis')">執行步驟 2 (請先完成上一步)</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card" id="card3">
         <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
-        <button id="btn3" onclick="runWorkflow(3, 'annotation')" disabled>執行步驟 3 (請先完成上一步)</button>
+        <button id="btn3" onclick="runWorkflow(3, 'annotation')">執行步驟 3 (請先完成上一步)</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card" id="card4">
         <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
-        <button id="btn4" onclick="runWorkflow(4, 'report')" disabled>執行步驟 4 (請先完成上一步)</button>
+        <button id="btn4" onclick="runWorkflow(4, 'report')">執行步驟 4 (請先完成上一步)</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
     </div>
@@ -68,62 +68,47 @@
     // 請將此處換成你的 ngrok 基礎網址
     const NGROK_BASE_URL = 'https://nubbliest-congruently-vicenta.ngrok-free.dev';
 
-    async function runWorkflow(stepNum, path) {
-        const geminiKey = document.getElementById('geminiKey').value;
-        const folderId = document.getElementById('folderId').value;
-        const statusEl = document.getElementById(`status${stepNum}`);
-        const resultEl = document.getElementById(`result${stepNum}`);
-        const currentBtn = document.getElementById(`btn${stepNum}`);
+    // 修改後的 runWorkflow 函式邏輯
+async function runWorkflow(stepNum, path) {
+    const geminiKey = document.getElementById('geminiKey').value;
+    const folderId = document.getElementById('folderId').value;
+    const statusEl = document.getElementById(`status${stepNum}`);
 
-        if (!geminiKey || !folderId) {
-            alert('請填寫 API Key 與資料夾 ID！');
-            return;
-        }
-
-        // 準備傳送的資料包
-        const payload = {
-            user_gemini_key: geminiKey,
-            google_folder_id: folderId,
-            previous_data: workflowResults[stepNum - 1] // 把上一步的結果帶進去
-        };
-
-        statusEl.innerText = "⏳ 執行中，請稍候...";
-        statusEl.style.color = "orange";
-        currentBtn.disabled = true;
-
-        try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                workflowResults[stepNum] = data; // 存儲結果
-                
-                statusEl.innerText = "✅ 執行成功！請檢查下方資料後繼續。";
-                statusEl.style.color = "green";
-                
-                // 顯示預覽
-                resultEl.style.display = "block";
-                resultEl.innerText = JSON.stringify(data, null, 2);
-
-                // 開啟下一個按鈕
-                if (stepNum < 4) {
-                    document.getElementById(`btn${stepNum + 1}`).disabled = false;
-                    document.getElementById(`btn${stepNum + 1}`).innerText = `執行步驟 ${stepNum + 1}`;
-                }
-            } else {
-                throw new Error(`伺服器回傳錯誤: ${response.status}`);
-            }
-        } catch (error) {
-            console.error(error);
-            statusEl.innerText = "❌ 失敗：" + error.message;
-            statusEl.style.color = "red";
-            currentBtn.disabled = false;
-        }
+    if (!geminiKey || !folderId) {
+        alert('請填寫基本設定！');
+        return;
     }
+
+    statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+    statusEl.style.color = "blue";
+
+    try {
+        const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_gemini_key: geminiKey,
+                google_folder_id: folderId
+                // 注意：這裡不再強迫傳遞 previous_data，因為 n8n 會自己去搜尋
+            })
+        });
+
+        const data = await response.json();
+
+        // 檢查 n8n 是否回傳了「前置檔案缺失」的錯誤
+        if (data.status === "error") {
+            statusEl.innerText = "⚠️ " + data.message;
+            statusEl.style.color = "red";
+            alert(data.message);
+        } else {
+            statusEl.innerText = "✅ 執行完成！";
+            statusEl.style.color = "green";
+            // 顯示結果...
+        }
+    } catch (error) {
+        statusEl.innerText = "❌ 連線失敗，請檢查 ngrok";
+    }
+}
 </script>
 
 </body>
