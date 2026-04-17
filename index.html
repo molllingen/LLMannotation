@@ -51,6 +51,27 @@
             })
             .then(res => alert("已發送請求給 n8n！"));
         }
+        async function sendToN8n() {
+            const geminiKey = document.getElementById('your-key-input-id').value;
+            const folderId = "使用者分享給你的資料夾ID"; 
+
+            const response = await fetch('你的_N8N_TUNNEL_網址/webhook-test/ocr', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_gemini_key: geminiKey,
+                    google_folder_id: folderId
+                })
+            });
+
+            if (response.ok) {
+                alert("資料已送出，n8n 開始執行！");
+            } else {
+                alert("連線失敗，請檢查 n8n 是否啟動並允許 CORS。");
+            }
+        }
     </script>
 </body>
 </html>
