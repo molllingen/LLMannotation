@@ -3,72 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LLM Annotation Tool</title>
+    <title>AI 流程中控台</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        .container { max-width: 600px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
-        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #45a049; }
-        #status { color: blue; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
+        .config-section { background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #3498db; }
+        .step-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
+        .step-card.active { border-color: #3498db; box-shadow: 0 0 10px rgba(52,152,219,0.2); }
+        .step-title { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; display: flex; align-items: center; }
+        .step-number { background: #3498db; color: white; border-radius: 50%; width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-size: 0.8em; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        button:hover:not(:disabled) { background-color: #2980b9; }
+        .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; }
+        .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 150px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🚀 AI 自動化流程啟動器</h2>
-    
-    <label for="geminiKey">1. 您的 Gemini API Key:</label>
-    <input type="password" id="geminiKey" placeholder="請貼上 AIZA... 開頭的 Key">
+    <h1>🚀 標註自動化流水線</h1>
 
-    <label for="folderId">2. Google Drive 資料夾 ID:</label>
-    <input type="text" id="folderId" placeholder="請輸入已分享的資料夾 ID">
+    <div class="config-section">
+        <strong>⚙️ 基本設定 (所有步驟共用)</strong>
+        <input type="password" id="geminiKey" placeholder="輸入使用者的 Gemini API Key">
+        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL 或 ID">
+    </div>
 
-    <button onclick="startN8n()">啟動流程</button>
-    
-    <p id="status"></p>
+    <div class="step-card" id="card1">
+        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
+        <button id="btn1" onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
+        <div id="status1" class="status">等待中...</div>
+        <div id="result1" class="result-preview"></div>
+    </div>
+
+    <div class="step-card" id="card2">
+        <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
+        <button id="btn2" onclick="runWorkflow(2, 'analysis')" disabled>執行步驟 2 (請先完成上一步)</button>
+        <div id="status2" class="status"></div>
+        <div id="result2" class="result-preview"></div>
+    </div>
+
+    <div class="step-card" id="card3">
+        <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
+        <button id="btn3" onclick="runWorkflow(3, 'annotation')" disabled>執行步驟 3 (請先完成上一步)</button>
+        <div id="status3" class="status"></div>
+        <div id="result3" class="result-preview"></div>
+    </div>
+
+    <div class="step-card" id="card4">
+        <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
+        <button id="btn4" onclick="runWorkflow(4, 'report')" disabled>執行步驟 4 (請先完成上一步)</button>
+        <div id="status4" class="status"></div>
+        <div id="result4" class="result-preview"></div>
+    </div>
 </div>
 
 <script>
-    async function startN8n() {
-        const statusElement = document.getElementById('status');
+    // 儲存各步驟回傳的結果
+    const workflowResults = { 1: null, 2: null, 3: null, 4: null };
+    
+    // 請將此處換成你的 ngrok 基礎網址
+    const NGROK_BASE_URL = 'https://nubbliest-congruently-vicenta.ngrok-free.dev';
+
+    async function runWorkflow(stepNum, path) {
         const geminiKey = document.getElementById('geminiKey').value;
         const folderId = document.getElementById('folderId').value;
-        const n8nWebhookUrl = 'https://nubbliest-congruently-vicenta.ngrok-free.dev/webhook-test/ocr';
+        const statusEl = document.getElementById(`status${stepNum}`);
+        const resultEl = document.getElementById(`result${stepNum}`);
+        const currentBtn = document.getElementById(`btn${stepNum}`);
 
         if (!geminiKey || !folderId) {
-            alert('請填寫完整資訊！');
+            alert('請填寫 API Key 與資料夾 ID！');
             return;
         }
 
-        statusElement.innerText = "⏳ 正在傳送請求至 n8n...";
+        // 準備傳送的資料包
+        const payload = {
+            user_gemini_key: geminiKey,
+            google_folder_id: folderId,
+            previous_data: workflowResults[stepNum - 1] // 把上一步的結果帶進去
+        };
+
+        statusEl.innerText = "⏳ 執行中，請稍候...";
+        statusEl.style.color = "orange";
+        currentBtn.disabled = true;
 
         try {
-            const response = await fetch(n8nWebhookUrl, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                // 這裡打包要傳給 n8n 的變數
-                body: JSON.stringify({
-                    user_gemini_key: geminiKey,
-                    google_folder_id: folderId
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                const result = await response.json();
-                statusElement.innerText = "✅ 成功！n8n 已接收並開始處理。";
-                console.log('n8n Response:', result);
+                const data = await response.json();
+                workflowResults[stepNum] = data; // 存儲結果
+                
+                statusEl.innerText = "✅ 執行成功！請檢查下方資料後繼續。";
+                statusEl.style.color = "green";
+                
+                // 顯示預覽
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+
+                // 開啟下一個按鈕
+                if (stepNum < 4) {
+                    document.getElementById(`btn${stepNum + 1}`).disabled = false;
+                    document.getElementById(`btn${stepNum + 1}`).innerText = `執行步驟 ${stepNum + 1}`;
+                }
             } else {
-                const errorData = await response.text();
-                statusElement.innerText = "❌ 失敗：" + response.status;
-                alert("傳送失敗，請確認 n8n 是否有點擊 'Listen for test event'");
+                throw new Error(`伺服器回傳錯誤: ${response.status}`);
             }
         } catch (error) {
-            console.error('Error:', error);
-            statusElement.innerText = "❌ 連線錯誤，請檢查 ngrok 或 CORS 設定。";
-            alert("連線錯誤！請檢查您的 n8n 容器是否已開啟 N8N_CORS_ALLOWED_ORIGINS=*");
+            console.error(error);
+            statusEl.innerText = "❌ 失敗：" + error.message;
+            statusEl.style.color = "red";
+            currentBtn.disabled = false;
         }
     }
 </script>
