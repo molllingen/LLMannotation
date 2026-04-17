@@ -9,16 +9,14 @@
         .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #2c3e50; }
         .config-section { background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #3498db; }
-        .step-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
-        .step-card.active { border-color: #3498db; box-shadow: 0 0 10px rgba(52,152,219,0.2); }
+        .step-card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
         .step-title { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; display: flex; align-items: center; }
         .step-number { background: #3498db; color: white; border-radius: 50%; width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center; margin-right: 10px; font-size: 0.8em; }
         input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
         button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        button:hover:not(:disabled) { background-color: #2980b9; }
-        .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; }
-        .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 150px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; }
+        button:hover { background-color: #2980b9; }
+        .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; font-weight: bold; }
+        .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 200px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -32,83 +30,85 @@
         <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL 或 ID">
     </div>
 
-    <div class="step-card" id="card1">
+    <div class="step-card">
         <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
-        <button id="btn1" onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
+        <button onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
         <div id="status1" class="status">等待中...</div>
         <div id="result1" class="result-preview"></div>
     </div>
 
-    <div class="step-card" id="card2">
+    <div class="step-card">
         <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
-        <button id="btn2" onclick="runWorkflow(2, 'analysis')">執行步驟 2 (請先完成上一步)</button>
+        <button onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
-    <div class="step-card" id="card3">
+    <div class="step-card">
         <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
-        <button id="btn3" onclick="runWorkflow(3, 'annotation')">執行步驟 3 (請先完成上一步)</button>
+        <button onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
-    <div class="step-card" id="card4">
+    <div class="step-card">
         <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
-        <button id="btn4" onclick="runWorkflow(4, 'report')">執行步驟 4 (請先完成上一步)</button>
+        <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
     </div>
 </div>
 
 <script>
-    // 儲存各步驟回傳的結果
-    const workflowResults = { 1: null, 2: null, 3: null, 4: null };
-    
-    // 請將此處換成你的 ngrok 基礎網址
     const NGROK_BASE_URL = 'https://nubbliest-congruently-vicenta.ngrok-free.dev';
 
-    // 修改後的 runWorkflow 函式邏輯
-async function runWorkflow(stepNum, path) {
-    const geminiKey = document.getElementById('geminiKey').value;
-    const folderId = document.getElementById('folderId').value;
-    const statusEl = document.getElementById(`status${stepNum}`);
+    async function runWorkflow(stepNum, path) {
+        const geminiKey = document.getElementById('geminiKey').value;
+        const folderInput = document.getElementById('folderId').value;
+        const statusEl = document.getElementById(`status${stepNum}`);
+        const resultEl = document.getElementById(`result${stepNum}`);
 
-    if (!geminiKey || !folderId) {
-        alert('請填寫基本設定！');
-        return;
-    }
-
-    statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
-    statusEl.style.color = "blue";
-
-    try {
-        const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_gemini_key: geminiKey,
-                google_folder_id: folderId
-                // 注意：這裡不再強迫傳遞 previous_data，因為 n8n 會自己去搜尋
-            })
-        });
-
-        const data = await response.json();
-
-        // 檢查 n8n 是否回傳了「前置檔案缺失」的錯誤
-        if (data.status === "error") {
-            statusEl.innerText = "⚠️ " + data.message;
-            statusEl.style.color = "red";
-            alert(data.message);
-        } else {
-            statusEl.innerText = "✅ 執行完成！";
-            statusEl.style.color = "green";
-            // 顯示結果...
+        if (!geminiKey || !folderInput) {
+            alert('請填寫基本設定！');
+            return;
         }
-    } catch (error) {
-        statusEl.innerText = "❌ 連線失敗，請檢查 ngrok";
+
+        // 自動提取 ID (防止使用者貼上整個網址)
+        const folderId = folderInput.includes('folders/') ? folderInput.split('folders/')[1].split('?')[0] : folderInput;
+
+        statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+        statusEl.style.color = "blue";
+        resultEl.style.display = "none";
+
+        try {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_gemini_key: geminiKey,
+                    google_folder_id: folderId
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "error") {
+                statusEl.innerText = "⚠️ " + data.message;
+                statusEl.style.color = "red";
+                alert(data.message);
+            } else {
+                statusEl.innerText = "✅ 執行完成！";
+                statusEl.style.color = "green";
+                
+                // 顯示回傳結果，方便檢查
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+            }
+        } catch (error) {
+            statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
+            statusEl.style.color = "red";
+        }
     }
-}
 </script>
 
 </body>
