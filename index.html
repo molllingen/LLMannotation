@@ -1,65 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <title>我的 AI 工具</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Annotation Tool</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .container { max-width: 600px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #45a049; }
+        #status { color: blue; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <h2>🚀 啟動我的自動化流程</h2>
+
+<div class="container">
+    <h2>🚀 AI 自動化流程啟動器</h2>
     
-    <p>第一步：輸入您的 Gemini API Key</p>
-    <input type="password" id="geminiKey" placeholder="貼上你的 API Key">
+    <label for="geminiKey">1. 您的 Gemini API Key:</label>
+    <input type="password" id="geminiKey" placeholder="請貼上 AIZA... 開頭的 Key">
 
-    <p>第二步：授權 Google 讀取檔案</p>
-    <button onclick="handleAuthClick()">連結我的 Google Drive</button>
+    <label for="folderId">2. Google Drive 資料夾 ID:</label>
+    <input type="text" id="folderId" placeholder="請輸入已分享的資料夾 ID">
 
-    <p>第三步：確認執行</p>
-    <button id="runBtn" disabled onclick="startN8n()">開始執行</button>
+    <button onclick="startN8n()">啟動流程</button>
+    
+    <p id="status"></p>
+</div>
 
-    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-    <script>
-        let tokenClient;
-        let accessToken = null;
+<script>
+    async function startN8n() {
+        const statusElement = document.getElementById('status');
+        const geminiKey = document.getElementById('geminiKey').value;
+        const folderId = document.getElementById('folderId').value;
+        const n8nWebhookUrl = 'https://nubbliest-congruently-vicenta.ngrok-free.dev/webhook-test/ocr';
 
-        function gisLoaded() {
-            // 這裡填入你剛剛在 Google 申請的 Client ID
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: '你的_CLIENT_ID_貼在這裡',
-                scope: 'https://www.googleapis.com/auth/drive.readonly',
-                callback: (tokenResponse) => {
-                    accessToken = tokenResponse.access_token;
-                    document.getElementById('runBtn').disabled = false;
-                    alert("Google 授權成功！");
-                },
-            });
+        if (!geminiKey || !folderId) {
+            alert('請填寫完整資訊！');
+            return;
         }
 
-        function handleAuthClick() {
-            tokenClient.requestAccessToken();
-        }
+        statusElement.innerText = "⏳ 正在傳送請求至 n8n...";
 
-        function startN8n() {
-            const key = document.getElementById('geminiKey').value;
-            
-            // 把資料發送到你的 n8n Webhook
-            fetch('你的_N8N_WEBHOOK_URL', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_gemini_key: key,
-                    google_access_token: accessToken
-                })
-            })
-            .then(res => alert("已發送請求給 n8n！"));
-        }
-        async function sendToN8n() {
-            const geminiKey = document.getElementById('your-key-input-id').value;
-            const folderId = "使用者分享給你的資料夾ID"; 
-
-            const response = await fetch('你的_N8N_TUNNEL_網址/webhook-test/ocr', {
+        try {
+            const response = await fetch(n8nWebhookUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                // 這裡打包要傳給 n8n 的變數
                 body: JSON.stringify({
                     user_gemini_key: geminiKey,
                     google_folder_id: folderId
@@ -67,11 +57,21 @@
             });
 
             if (response.ok) {
-                alert("資料已送出，n8n 開始執行！");
+                const result = await response.json();
+                statusElement.innerText = "✅ 成功！n8n 已接收並開始處理。";
+                console.log('n8n Response:', result);
             } else {
-                alert("連線失敗，請檢查 n8n 是否啟動並允許 CORS。");
+                const errorData = await response.text();
+                statusElement.innerText = "❌ 失敗：" + response.status;
+                alert("傳送失敗，請確認 n8n 是否有點擊 'Listen for test event'");
             }
+        } catch (error) {
+            console.error('Error:', error);
+            statusElement.innerText = "❌ 連線錯誤，請檢查 ngrok 或 CORS 設定。";
+            alert("連線錯誤！請檢查您的 n8n 容器是否已開啟 N8N_CORS_ALLOWED_ORIGINS=*");
         }
-    </script>
+    }
+</script>
+
 </body>
 </html>
