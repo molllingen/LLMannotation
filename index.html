@@ -81,7 +81,7 @@
         resultEl.style.display = "none";
 
         try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
