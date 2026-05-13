@@ -22,12 +22,12 @@
 <body>
 
 <div class="container">
-    <h1>🚀 標註自動化流水線</h1>
+    <h1>LLM文本標註</h1>
 
     <div class="config-section">
-        <strong>⚙️ 基本設定 (所有步驟共用)</strong>
+        <strong>基本設定 (所有步驟共用)</strong>
         <input type="password" id="geminiKey" placeholder="輸入使用者的 Gemini API Key">
-        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL 或 ID">
+        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL">
     </div>
 
     <div class="step-card">
@@ -38,21 +38,21 @@
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
+        <div class="step-title"><span class="step-number">2</span> 特徵抽取</div>
         <button onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
+        <div class="step-title"><span class="step-number">3</span> 聚合拆分</div>
         <button onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
+        <div class="step-title"><span class="step-number">4</span> 生成索引網頁 </div>
         <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
@@ -105,7 +105,7 @@
                 resultEl.innerText = JSON.stringify(data, null, 2);
             }
         } catch (error) {
-            statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
+            statusEl.innerText = "❌ 連線失敗";
             statusEl.style.color = "red";
         }
     }
