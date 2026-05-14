@@ -105,7 +105,28 @@
                 resultEl.innerText = JSON.stringify(data, null, 2);
             }
         } catch (error) {
-            statusEl.innerText = "❌ 連線失敗";
+            //statusEl.innerText = "❌ 連線失敗";
+            //statusEl.style.color = "red";
+            console.error(error);
+
+            let msg = "❌ 發生錯誤";
+        
+            // Gemini Rate Limit
+            if (error.message.includes("429")) {
+                msg = "⚠️ Gemini API 使用過於頻繁，請稍後再試";
+            }
+        
+            // API Key 錯誤
+            else if (error.message.includes("403")) {
+                msg = "⚠️ Gemini API Key 無效";
+            }
+        
+            // ngrok/n8n 關閉
+            else if (error.message.includes("Failed to fetch")) {
+                msg = "⚠️ 無法連線到伺服器";
+            }
+        
+            statusEl.innerText = msg;
             statusEl.style.color = "red";
         }
     }
