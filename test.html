@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 流程中控台</title>
+    <title>AI 輔助文本標註流程中控台</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -22,7 +22,7 @@
 <body>
 
 <div class="container">
-    <h1>🚀 標註自動化流水線</h1>
+    <h1>自動化標註流程</h1>
 
     <div class="config-section">
         <strong>⚙️ 基本設定 (所有步驟共用)</strong>
@@ -33,7 +33,7 @@
     <div class="step-card">
         <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 </div>
         <button onclick="runWorkflow(1, 'Wocr')">執行步驟 1</button>
-        <div id="status1" class="status">等待中...</div>
+        <div id="status1" class="status"></div>
         <div id="result1" class="result-preview"></div>
     </div>
 
