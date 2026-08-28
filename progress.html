@@ -67,20 +67,23 @@
         const folderInput = document.getElementById('folderId').value;
         const statusEl = document.getElementById(`status${stepNum}`);
         const resultEl = document.getElementById(`result${stepNum}`);
-
+    
         if (!geminiKey || !folderInput) {
             alert('請填寫基本設定！');
             return;
         }
-
-        // 自動提取 ID (防止使用者貼上整個網址)
-        const folderId = folderInput.includes('folders/') ? folderInput.split('folders/')[1].split('?')[0] : folderInput;
-
-        statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+    
+        const folderId = folderInput.includes('folders/') 
+            ? folderInput.split('folders/')[1].split('?')[0] 
+            : folderInput;
+    
+        statusEl.innerText = "⏳ 正在啟動流程...";
         statusEl.style.color = "blue";
         resultEl.style.display = "none";
-
+    
         try {
+            // 這裡的 fetch 現在只是「啟動」，主流程 Webhook 節點
+            // 必須改成 Respond: Immediately，這樣這段會馬上回來
             const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -89,43 +92,50 @@
                     google_folder_id: folderId
                 })
             });
-
+    
             const data = await response.json();
-
+    
             if (data.status === "error") {
                 statusEl.innerText = "⚠️ " + data.message;
                 statusEl.style.color = "red";
                 alert(data.message);
-            } else {
-                statusEl.innerText = "✅ 執行完成！";
-                statusEl.style.color = "green";
-                
-                // 顯示回傳結果，方便檢查
-                resultEl.style.display = "block";
-                resultEl.innerText = JSON.stringify(data, null, 2);
+                return; // 出錯就不要進入輪詢
             }
+    
+            statusEl.innerText = "🚀 已啟動，執行中...";
+            // 開始輪詢，帶上是第幾步
+            await pollStatus(folderId, stepNum, statusEl, resultEl);
+    
         } catch (error) {
             statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
             statusEl.style.color = "red";
         }
     }
-    async function pollStatus(folderId, statusEl, resultEl) {
-        const maxAttempts = 60; // 例如最多轮询 5 分钟 (60*5秒)
+    
+    async function pollStatus(folderId, stepNum, statusEl, resultEl) {
+        const maxAttempts = 60; // 5秒一次，最多等5分鐘，依實際跑多久調整
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 5000));
             const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ google_folder_id: folderId })
+                body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
             });
             const data = await res.json();
+    
             if (data.status === 'done') {
                 statusEl.innerText = "✅ 執行完成！";
+                statusEl.style.color = "green";
                 resultEl.style.display = "block";
                 resultEl.innerText = JSON.stringify(data, null, 2);
                 return;
             }
-            statusEl.innerText = `⏳ 執行中...（第 ${i+1} 次確認）`;
+            if (data.status === 'error') {
+                statusEl.innerText = "⚠️ " + (data.message || "執行失敗");
+                statusEl.style.color = "red";
+                return;
+            }
+            statusEl.innerText = `⏳ 執行中...（第 ${i + 1} 次確認）`;
         }
         statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
     }
