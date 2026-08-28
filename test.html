@@ -60,7 +60,7 @@
 </div>
 
 <script>
-    const NGROK_BASE_URL = 'https://nubbliest-congruently-vicenta.ngrok-free.dev';
+    const NGROK_BASE_URL = 'https://n8n-2026-2.dlll.nccu.edu.tw';
 
     async function runWorkflow(stepNum, path) {
         const geminiKey = document.getElementById('geminiKey').value;
@@ -81,7 +81,7 @@
         resultEl.style.display = "none";
 
         try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
