@@ -15,6 +15,7 @@
         input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
         button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
         .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; font-weight: bold; }
         .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 200px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
     </style>
@@ -31,29 +32,29 @@
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 </div>
-        <button onclick="runWorkflow(1, 'Wocr')">執行步驟 1</button>
+        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
+        <button id="btn1" onclick="runWorkflow(1, 'Wocr')">執行步驟 1</button>
         <div id="status1" class="status"></div>
         <div id="result1" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
-        <button onclick="runWorkflow(2, 'Wanalysis')">執行步驟 2</button>
+        <button id="btn2" onclick="runWorkflow(2, 'Wanalysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
-        <button onclick="runWorkflow(3, 'Wannotation')">執行步驟 3</button>
+        <button id="btn3" onclick="runWorkflow(3, 'Wannotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
-        <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
+        <button id="btn4" onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
     </div>
@@ -67,23 +68,25 @@
         const folderInput = document.getElementById('folderId').value;
         const statusEl = document.getElementById(`status${stepNum}`);
         const resultEl = document.getElementById(`result${stepNum}`);
-    
+        const btnEl = document.getElementById(`btn${stepNum}`);
+
         if (!geminiKey || !folderInput) {
             alert('請填寫基本設定！');
             return;
         }
-    
-        const folderId = folderInput.includes('folders/') 
-            ? folderInput.split('folders/')[1].split('?')[0] 
+
+        // 自動提取 ID (防止使用者貼上整個網址)
+        const folderId = folderInput.includes('folders/')
+            ? folderInput.split('folders/')[1].split('?')[0]
             : folderInput;
-    
+
+        btnEl.disabled = true;
         statusEl.innerText = "⏳ 正在啟動流程...";
         statusEl.style.color = "blue";
         resultEl.style.display = "none";
-    
+
+        let data;
         try {
-            // 這裡的 fetch 現在只是「啟動」，主流程 Webhook 節點
-            // 必須改成 Respond: Immediately，這樣這段會馬上回來
             const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -92,42 +95,70 @@
                     google_folder_id: folderId
                 })
             });
-    
-            const data = await response.json();
-    
-            if (data.status === "error") {
-                statusEl.innerText = "⚠️ " + data.message;
-                statusEl.style.color = "red";
-                alert(data.message);
-                return; // 出錯就不要進入輪詢
-            }
-    
-            statusEl.innerText = "🚀 已啟動，執行中...";
-            // 開始輪詢，帶上是第幾步
-            await pollStatus(folderId, stepNum, statusEl, resultEl);
-    
+            data = await response.json();
         } catch (error) {
-            statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
+            console.error("【啟動主流程失敗】", error);
+            statusEl.innerText = "❌ 啟動失敗：" + error.message;
             statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
+
+        if (data && data.status === "error") {
+            statusEl.innerText = "⚠️ " + data.message;
+            statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
+
+        statusEl.innerText = "🚀 已啟動，開始查詢狀態...";
+
+        try {
+            await pollStatus(folderId, stepNum, statusEl, resultEl);
+        } catch (error) {
+            console.error("【輪詢狀態失敗】", error);
+            statusEl.innerText = "❌ 查詢狀態失敗：" + error.message;
+            statusEl.style.color = "red";
+        } finally {
+            btnEl.disabled = false;
         }
     }
-    
+
     async function pollStatus(folderId, stepNum, statusEl, resultEl) {
-        const maxAttempts = 60;
+        const maxAttempts = 60; // 每5秒一次，最多等5分鐘，依實際狀況調整
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 5000));
-    
+
             const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
             });
-    
+
             const text = await res.text();
-            console.log("查詢回應原始內容:", text); // 先留著方便除錯
-    
-            const data = JSON.parse(text);
-    
+            console.log("查詢回應原始內容:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("回應不是合法 JSON:", text);
+                statusEl.innerText = "⚠️ 查詢回應格式異常，請檢查 n8n Webhook1 設定";
+                statusEl.style.color = "red";
+                return;
+            }
+
+            // 關鍵：查詢節點若回傳陣列(可能有重複行)，取 updatedAt 最新的一筆
+            if (Array.isArray(data)) {
+                if (data.length === 0) {
+                    data = { status: 'not_started' };
+                } else {
+                    data = data.slice().sort(
+                        (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+                    )[0];
+                }
+            }
+
             if (data.status === 'done') {
                 statusEl.innerText = "✅ 執行完成！";
                 statusEl.style.color = "green";
@@ -135,22 +166,24 @@
                 resultEl.innerText = JSON.stringify(data, null, 2);
                 return;
             }
+
             if (data.status === 'error') {
                 statusEl.innerText = "⚠️ " + (data.message || "執行失敗");
                 statusEl.style.color = "red";
                 return;
             }
-            if (data.status === 'not_started' || !data.status) {
-                statusEl.innerText = `⏳ 尚未偵測到執行紀錄...（已等待 ${(i+1)*5} 秒）`;
-            } else {
-                // processing 狀態，顯示已處理的檔案數（如果有回傳的話）
-                const progress = data.processedCount != null && data.totalCount != null
-                    ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
-                    : '';
-                statusEl.innerText = `⏳ 執行中 ${progress}（已等待 ${(i+1)*5} 秒）`;
-            }
+
+            const progress = (data.processedCount != null && data.totalCount != null)
+                ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
+                : '';
+
+            statusEl.innerText = data.status
+                ? `⏳ 執行中 ${progress}（已等待 ${(i + 1) * 5} 秒）`
+                : `⏳ 尚未偵測到執行紀錄...（已等待 ${(i + 1) * 5} 秒）`;
+            statusEl.style.color = "blue";
         }
         statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
+        statusEl.style.color = "orange";
     }
 </script>
 
