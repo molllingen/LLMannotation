@@ -111,7 +111,7 @@
             return;
         }
 
-        statusEl.innerText = "🚀 已啟動，開始查詢狀態...";
+        statusEl.innerText = "⏳ 正在執行中，請耐心等候...";
 
         try {
             await pollStatus(folderId, stepNum, statusEl, resultEl);
