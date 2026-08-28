@@ -84,7 +84,7 @@
         try {
             // 這裡的 fetch 現在只是「啟動」，主流程 Webhook 節點
             // 必須改成 Respond: Immediately，這樣這段會馬上回來
-            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
