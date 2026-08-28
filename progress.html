@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 流程中控台</title>
+    <title>AI 輔助文本標註流程中控台</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -16,181 +16,119 @@
         button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button:hover { background-color: #2980b9; }
         .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; font-weight: bold; }
-        .progress-container { width: 100%; background-color: #ddd; border-radius: 10px; overflow: hidden; margin-top: 10px; height: 24px; }
-        .progress-bar { height: 100%; width: 0%; background-color: #3498db; text-align: center; line-height: 24px; color: white; font-weight: bold; transition: width 0.4s ease; }
         .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 200px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🎰LLM文本標註</h1>
+    <h1>自動化標註流程</h1>
 
     <div class="config-section">
-        <strong>基本設定 (所有步驟共用)</strong>
+        <strong>⚙️ 基本設定 (所有步驟共用)</strong>
         <input type="password" id="geminiKey" placeholder="輸入使用者的 Gemini API Key">
-        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL">
+        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL 或 ID">
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
-        <button onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
-        <div id="status1" class="status">等待中...</div>
-    <!-- 進度條 -->
-    <div id="progress1" class="progress-container" style="display:none;">
-        <div id="progressBar1" class="progress-bar">0%</div>
-    </div>
+        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 </div>
+        <button onclick="runWorkflow(1, 'Wocr')">執行步驟 1</button>
+        <div id="status1" class="status"></div>
         <div id="result1" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">2</span> 特徵抽取</div>
-        <button onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
+        <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
+        <button onclick="runWorkflow(2, 'Wanalysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
-    <!-- 進度條 -->
-    <div id="progress2" class="progress-container" style="display:none;">
-        <div id="progressBar2" class="progress-bar">0%</div>
-    </div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">3</span> 聚合拆分</div>
-        <button onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
+        <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
+        <button onclick="runWorkflow(3, 'Wannotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
-    <!-- 進度條 -->
-    <div id="progress3" class="progress-container" style="display:none;">
-        <div id="progressBar3" class="progress-bar">0%</div>
-    </div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">4</span> 生成索引網頁 </div>
+        <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
         <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
-    <!-- 進度條 -->
-    <div id="progress4" class="progress-container" style="display:none;">
-        <div id="progressBar4" class="progress-bar">0%</div>
-    </div>
         <div id="result4" class="result-preview"></div>
     </div>
 </div>
 
 <script>
-const NGROK_BASE_URL = 'https://nubbliest-congruently-vicenta.ngrok-free.dev';
+    const NGROK_BASE_URL = 'https://n8n-2026-2.dlll.nccu.edu.tw';
 
-async function runWorkflow(stepNum, path) {
+    async function runWorkflow(stepNum, path) {
+        const geminiKey = document.getElementById('geminiKey').value;
+        const folderInput = document.getElementById('folderId').value;
+        const statusEl = document.getElementById(`status${stepNum}`);
+        const resultEl = document.getElementById(`result${stepNum}`);
 
-    const geminiKey = document.getElementById('geminiKey').value;
-    const folderInput = document.getElementById('folderId').value;
-
-    const statusEl = document.getElementById(`status${stepNum}`);
-    const resultEl = document.getElementById(`result${stepNum}`);
-    const progressEl = document.getElementById(`progress${stepNum}`);
-    const progressBar = document.getElementById(`progressBar${stepNum}`);
-
-    if (!geminiKey || !folderInput) {
-        alert('請填寫基本設定！');
-        return;
-    }
-
-    // 自動提取資料夾 ID
-    const folderId = folderInput.includes('folders/')
-        ? folderInput.split('folders/')[1].split('?')[0]
-        : folderInput;
-
-    statusEl.innerText = "⏳ 正在執行...";
-    statusEl.style.color = "blue";
-
-    resultEl.style.display = "none";
-
-    // 顯示進度條
-    progressEl.style.display = "block";
-
-    let progress = 0;
-
-    // 假進度動畫
-    const progressTimer = setInterval(() => {
-
-        if (progress < 95) {
-
-    // 越後面越慢
-    const increment = Math.max(0.5, (95 - progress) * 0.08);
-
-    progress += increment;
-
-    progressBar.style.width = `${progress}%`;
-    progressBar.innerText = `${Math.floor(progress)}%`;
+        if (!geminiKey || !folderInput) {
+            alert('請填寫基本設定！');
+            return;
         }
 
-    }, 500);
+        // 自動提取 ID (防止使用者貼上整個網址)
+        const folderId = folderInput.includes('folders/') ? folderInput.split('folders/')[1].split('?')[0] : folderInput;
 
-    try {
+        statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+        statusEl.style.color = "blue";
+        resultEl.style.display = "none";
 
-        const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                user_gemini_key: geminiKey,
-                google_folder_id: folderId
-            })
-        });
+        try {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_gemini_key: geminiKey,
+                    google_folder_id: folderId
+                })
+            });
 
-        const data = await response.json();
+            const data = await response.json();
 
-        clearInterval(progressTimer);
-
-        // 完成
-        progressBar.style.width = `100%`;
-        progressBar.innerText = `100%`;
-
-        if (data.status === "error") {
-
-            statusEl.innerText = "⚠️ " + data.message;
+            if (data.status === "error") {
+                statusEl.innerText = "⚠️ " + data.message;
+                statusEl.style.color = "red";
+                alert(data.message);
+            } else {
+                statusEl.innerText = "✅ 執行完成！";
+                statusEl.style.color = "green";
+                
+                // 顯示回傳結果，方便檢查
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+            }
+        } catch (error) {
+            statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
             statusEl.style.color = "red";
-
-            alert(data.message);
-
-        } else {
-
-            statusEl.innerText = "✅ 執行完成！";
-            statusEl.style.color = "green";
-
-            resultEl.style.display = "block";
-            resultEl.innerText = JSON.stringify(data, null, 2);
         }
-
-    } catch (error) {
-
-        clearInterval(progressTimer);
-
-        console.error(error);
-
-        let msg = "❌ 發生錯誤";
-    
-        // Gemini Rate Limit
-        if (error.message.includes("429")) {
-            msg = "⚠️ Gemini API 使用過於頻繁，請稍後再試";
-        }
-    
-        // API Key 錯誤
-        else if (error.message.includes("403")) {
-            msg = "⚠️ Gemini API Key 無效";
-        }
-    
-        // ngrok/n8n 關閉
-        else if (error.message.includes("Failed to fetch")) {
-            msg = "⚠️ 無法連線到伺服器";
-        }
-    
-        statusEl.innerText = msg;
-        statusEl.style.color = "red";
-
     }
-}
+    async function pollStatus(folderId, statusEl, resultEl) {
+        const maxAttempts = 60; // 例如最多轮询 5 分钟 (60*5秒)
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ google_folder_id: folderId })
+            });
+            const data = await res.json();
+            if (data.status === 'done') {
+                statusEl.innerText = "✅ 執行完成！";
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+                return;
+            }
+            statusEl.innerText = `⏳ 執行中...（第 ${i+1} 次確認）`;
+        }
+        statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
+    }
 </script>
 
 </body>
