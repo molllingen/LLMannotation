@@ -113,15 +113,20 @@
     }
     
     async function pollStatus(folderId, stepNum, statusEl, resultEl) {
-        const maxAttempts = 60; // 5秒一次，最多等5分鐘，依實際跑多久調整
+        const maxAttempts = 60;
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 5000));
+    
             const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
             });
-            const data = await res.json();
+    
+            const text = await res.text();
+            console.log("查詢回應原始內容:", text); // 先留著方便除錯
+    
+            const data = JSON.parse(text);
     
             if (data.status === 'done') {
                 statusEl.innerText = "✅ 執行完成！";
@@ -135,7 +140,15 @@
                 statusEl.style.color = "red";
                 return;
             }
-            statusEl.innerText = `⏳ 執行中...（第 ${i + 1} 次確認）`;
+            if (data.status === 'not_started' || !data.status) {
+                statusEl.innerText = `⏳ 尚未偵測到執行紀錄...（已等待 ${(i+1)*5} 秒）`;
+            } else {
+                // processing 狀態，顯示已處理的檔案數（如果有回傳的話）
+                const progress = data.processedCount != null && data.totalCount != null
+                    ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
+                    : '';
+                statusEl.innerText = `⏳ 執行中 ${progress}（已等待 ${(i+1)*5} 秒）`;
+            }
         }
         statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
     }
