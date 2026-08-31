@@ -124,6 +124,17 @@
             return;
         }
 
+        // 步驟 4 使用同步的 Respond to Webhook（不寫入狀態表），
+        // 這裡的 fetch 已經是等流程跑完拿到的最終結果，不需要再輪詢查詢狀態
+        if (stepNum === 4) {
+            statusEl.innerText = "✅ 執行完成！";
+            statusEl.style.color = "green";
+            resultEl.style.display = "block";
+            resultEl.innerText = JSON.stringify(data, null, 2);
+            btnEl.disabled = false;
+            return;
+        }
+
         statusEl.innerText = "⏳ 流程已啟動，正在執行中...";
         statusEl.style.color = "blue";
 
