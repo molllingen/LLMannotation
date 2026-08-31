@@ -68,6 +68,7 @@
         const folderInput = document.getElementById('folderId').value;
         const statusEl = document.getElementById(`status${stepNum}`);
         const resultEl = document.getElementById(`result${stepNum}`);
+        const btnEl = document.getElementById(`btn${stepNum}`);
 
         if (!geminiKey || !folderInput) {
             alert('請填寫基本設定！');
@@ -75,12 +76,16 @@
         }
 
         // 自動提取 ID (防止使用者貼上整個網址)
-        const folderId = folderInput.includes('folders/') ? folderInput.split('folders/')[1].split('?')[0] : folderInput;
+        const folderId = folderInput.includes('folders/')
+            ? folderInput.split('folders/')[1].split('?')[0]
+            : folderInput;
 
-        statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+        btnEl.disabled = true;
+        statusEl.innerText = "⏳ 正在啟動流程...";
         statusEl.style.color = "blue";
         resultEl.style.display = "none";
 
+        let data;
         try {
             const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
@@ -90,46 +95,95 @@
                     google_folder_id: folderId
                 })
             });
+            data = await response.json();
+        } catch (error) {
+            console.error("【啟動主流程失敗】", error);
+            statusEl.innerText = "❌ 啟動失敗：" + error.message;
+            statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
 
-            const data = await response.json();
+        if (data && data.status === "error") {
+            statusEl.innerText = "⚠️ " + data.message;
+            statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
 
-            if (data.status === "error") {
-                statusEl.innerText = "⚠️ " + data.message;
+        statusEl.innerText = "⏳ 正在執行中，請耐心等候...";
+
+        try {
+            await pollStatus(folderId, stepNum, statusEl, resultEl);
+        } catch (error) {
+            console.error("【輪詢狀態失敗】", error);
+            statusEl.innerText = "❌ 查詢狀態失敗：" + error.message;
+            statusEl.style.color = "red";
+        } finally {
+            btnEl.disabled = false;
+        }
+    }
+
+    async function pollStatus(folderId, stepNum, statusEl, resultEl) {
+        const maxAttempts = 60; // 每5秒一次，最多等5分鐘，依實際狀況調整
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+
+            const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
+            });
+
+            const text = await res.text();
+            console.log("查詢回應原始內容:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("回應不是合法 JSON:", text);
+                statusEl.innerText = "⚠️ 查詢回應格式異常，請檢查 n8n Webhook1 設定";
                 statusEl.style.color = "red";
-                alert(data.message);
-            } else {
+                return;
+            }
+
+            // 關鍵：查詢節點若回傳陣列(可能有重複行)，取 updatedAt 最新的一筆
+            if (Array.isArray(data)) {
+                if (data.length === 0) {
+                    data = { status: 'not_started' };
+                } else {
+                    data = data.slice().sort(
+                        (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+                    )[0];
+                }
+            }
+
+            if (data.status === 'done') {
                 statusEl.innerText = "✅ 執行完成！";
                 statusEl.style.color = "green";
-                
-                // 顯示回傳結果，方便檢查
                 resultEl.style.display = "block";
                 resultEl.innerText = JSON.stringify(data, null, 2);
+                return;
             }
-        } catch (error) {
-            //statusEl.innerText = "❌ 連線失敗";
-            //statusEl.style.color = "red";
-            console.error(error);
 
-            let msg = "❌ 發生錯誤";
-        
-            // Gemini Rate Limit
-            if (error.message.includes("429")) {
-                msg = "⚠️ Gemini API 使用過於頻繁，請稍後再試";
+            if (data.status === 'error') {
+                statusEl.innerText = "⚠️ " + (data.message || "執行失敗");
+                statusEl.style.color = "red";
+                return;
             }
-        
-            // API Key 錯誤
-            else if (error.message.includes("403")) {
-                msg = "⚠️ Gemini API Key 無效";
-            }
-        
-            // ngrok/n8n 關閉
-            else if (error.message.includes("Failed to fetch")) {
-                msg = "⚠️ 無法連線到伺服器";
-            }
-        
-            statusEl.innerText = msg;
-            statusEl.style.color = "red";
+
+            const progress = (data.processedCount != null && data.totalCount != null)
+                ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
+                : '';
+
+            statusEl.innerText = data.status
+                ? `⏳ 執行中 ${progress}（已等待 ${(i + 1) * 5} 秒）`
+                : `⏳ 尚未偵測到執行紀錄...（已等待 ${(i + 1) * 5} 秒）`;
+            statusEl.style.color = "blue";
         }
+        statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
+        statusEl.style.color = "orange";
     }
 </script>
 
