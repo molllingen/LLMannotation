@@ -32,28 +32,28 @@
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
-        <button onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
+        <button id="btn1" onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
         <div id="status1" class="status">等待中...</div>
         <div id="result1" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">2</span> 特徵抽取</div>
-        <button onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
+        <button id="btn2" onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">3</span> 聚合拆分</div>
-        <button onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
+        <button id="btn3" onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">4</span> 生成索引網頁 </div>
-        <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
+        <button id="btn4" onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
     </div>
@@ -64,127 +64,83 @@
    const NGROK_BASE_URL = 'https://n8n-2026-2.dlll.nccu.edu.tw';
 
     async function runWorkflow(stepNum, path) {
-        const geminiKey = document.getElementById('geminiKey').value;
-        const folderInput = document.getElementById('folderId').value;
-        const statusEl = document.getElementById(`status${stepNum}`);
-        const resultEl = document.getElementById(`result${stepNum}`);
-        const btnEl = document.getElementById(`btn${stepNum}`);
+    const geminiKey = document.getElementById('geminiKey').value;
+    const folderInput = document.getElementById('folderId').value;
+    const statusEl = document.getElementById(`status${stepNum}`);
+    const resultEl = document.getElementById(`result${stepNum}`);
+    const btnEl = document.getElementById(`btn${stepNum}`);
 
-        if (!geminiKey || !folderInput) {
-            alert('請填寫基本設定！');
-            return;
-        }
-
-        // 自動提取 ID (防止使用者貼上整個網址)
-        const folderId = folderInput.includes('folders/')
-            ? folderInput.split('folders/')[1].split('?')[0]
-            : folderInput;
-
-        btnEl.disabled = true;
-        statusEl.innerText = "⏳ 正在啟動流程...";
-        statusEl.style.color = "blue";
-        resultEl.style.display = "none";
-
-        let data;
-        try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_gemini_key: geminiKey,
-                    google_folder_id: folderId
-                })
-            });
-            data = await response.json();
-        } catch (error) {
-            console.error("【啟動主流程失敗】", error);
-            statusEl.innerText = "❌ 啟動失敗：" + error.message;
-            statusEl.style.color = "red";
-            btnEl.disabled = false;
-            return;
-        }
-
-        if (data && data.status === "error") {
-            statusEl.innerText = "⚠️ " + data.message;
-            statusEl.style.color = "red";
-            btnEl.disabled = false;
-            return;
-        }
-
-        statusEl.innerText = "⏳ 正在執行中，請耐心等候...";
-
-        try {
-            await pollStatus(folderId, stepNum, statusEl, resultEl);
-        } catch (error) {
-            console.error("【輪詢狀態失敗】", error);
-            statusEl.innerText = "❌ 查詢狀態失敗：" + error.message;
-            statusEl.style.color = "red";
-        } finally {
-            btnEl.disabled = false;
-        }
+    if (!geminiKey || !folderInput) {
+        alert('請填寫基本設定！');
+        return;
     }
 
-    async function pollStatus(folderId, stepNum, statusEl, resultEl) {
-        const maxAttempts = 60; // 每5秒一次，最多等5分鐘，依實際狀況調整
-        for (let i = 0; i < maxAttempts; i++) {
-            await new Promise(r => setTimeout(r, 5000));
+    const folderId = folderInput.includes('folders/')
+        ? folderInput.split('folders/')[1].split('?')[0]
+        : folderInput;
 
-            const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
-            });
+    // 防止重複點擊
+    btnEl.disabled = true;
 
-            const text = await res.text();
-            console.log("查詢回應原始內容:", text);
+    statusEl.innerText = "⏳ 正在啟動流程...";
+    statusEl.style.color = "blue";
 
-            let data;
+    resultEl.style.display = "none";
+
+    try {
+        const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_gemini_key: geminiKey,
+                google_folder_id: folderId
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const text = await response.text();
+
+        console.log("啟動流程回應:", text);
+
+        let data = {};
+
+        if (text) {
             try {
                 data = JSON.parse(text);
             } catch (e) {
-                console.error("回應不是合法 JSON:", text);
-                statusEl.innerText = "⚠️ 查詢回應格式異常，請檢查 n8n Webhook1 設定";
-                statusEl.style.color = "red";
-                return;
+                console.warn("回應不是 JSON，但流程可能已啟動");
             }
-
-            // 關鍵：查詢節點若回傳陣列(可能有重複行)，取 updatedAt 最新的一筆
-            if (Array.isArray(data)) {
-                if (data.length === 0) {
-                    data = { status: 'not_started' };
-                } else {
-                    data = data.slice().sort(
-                        (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
-                    )[0];
-                }
-            }
-
-            if (data.status === 'done') {
-                statusEl.innerText = "✅ 執行完成！";
-                statusEl.style.color = "green";
-                resultEl.style.display = "block";
-                resultEl.innerText = JSON.stringify(data, null, 2);
-                return;
-            }
-
-            if (data.status === 'error') {
-                statusEl.innerText = "⚠️ " + (data.message || "執行失敗");
-                statusEl.style.color = "red";
-                return;
-            }
-
-            const progress = (data.processedCount != null && data.totalCount != null)
-                ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
-                : '';
-
-            statusEl.innerText = data.status
-                ? `⏳ 執行中 ${progress}（已等待 ${(i + 1) * 5} 秒）`
-                : `⏳ 尚未偵測到執行紀錄...（已等待 ${(i + 1) * 5} 秒）`;
-            statusEl.style.color = "blue";
         }
-        statusEl.innerText = "⚠️ 已超過等待時間，請至後台確認執行狀態";
-        statusEl.style.color = "orange";
+
+        if (data.status === "error") {
+            statusEl.innerText = "⚠️ " + (data.message || "流程啟動失敗");
+            statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
+
+        // 成功啟動
+        statusEl.innerText = "⏳ 流程已啟動，正在執行中...";
+        statusEl.style.color = "blue";
+
+        // 開始查詢進度
+        await pollStatus(folderId, stepNum, statusEl, resultEl);
+
+    } catch (error) {
+        console.error("【流程錯誤】", error);
+
+        statusEl.innerText = "❌ 發生錯誤：" + error.message;
+        statusEl.style.color = "red";
+
+    } finally {
+        btnEl.disabled = false;
     }
+}
 </script>
 
 </body>
