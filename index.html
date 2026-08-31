@@ -141,6 +141,97 @@
         btnEl.disabled = false;
     }
 }
+    async function pollStatus(folderId, stepNum, statusEl, resultEl) {
+    const maxAttempts = 60; // 每 5 秒查一次，最多 5 分鐘
+
+    for (let i = 0; i < maxAttempts; i++) {
+
+        // 等待 5 秒
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        try {
+            const res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    google_folder_id: folderId,
+                    step: stepNum
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const text = await res.text();
+
+            console.log("查詢進度回應:", text);
+
+            let data;
+
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("回應不是合法 JSON:", text);
+                continue;
+            }
+
+            // 如果 n8n 回傳陣列，取第一筆
+            if (Array.isArray(data)) {
+                data = data.length > 0
+                    ? data[0]
+                    : { status: "not_started" };
+            }
+
+            // 完成
+            if (data.status === "done") {
+                statusEl.innerText = "✅ 執行完成！";
+                statusEl.style.color = "green";
+
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+
+                return;
+            }
+
+            // 錯誤
+            if (data.status === "error") {
+                statusEl.innerText =
+                    "❌ " + (data.message || "流程執行失敗");
+                statusEl.style.color = "red";
+
+                return;
+            }
+
+            // 執行中
+            const progress =
+                (data.processedCount != null &&
+                 data.totalCount != null)
+                    ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
+                    : '';
+
+            statusEl.innerText =
+                `⏳ 執行中 ${progress}（已等待 ${(i + 1) * 5} 秒）`;
+
+            statusEl.style.color = "blue";
+
+        } catch (error) {
+            console.error("查詢進度失敗:", error);
+
+            statusEl.innerText =
+                `⚠️ 暫時無法取得進度（已等待 ${(i + 1) * 5} 秒）`;
+
+            statusEl.style.color = "orange";
+        }
+    }
+
+    statusEl.innerText =
+        "⚠️ 已超過等待時間，請至 n8n 後台確認執行狀態";
+
+    statusEl.style.color = "orange";
+}
 </script>
 
 </body>
