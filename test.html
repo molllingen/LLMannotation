@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 輔助文本標註流程中控台</title>
+    <title>LLM文本標註</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -15,6 +15,7 @@
         input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
         button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.3s; }
         button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
         .status { font-size: 0.9em; margin-top: 5px; min-height: 20px; font-weight: bold; }
         .result-preview { background: #272822; color: #f8f8f2; padding: 10px; border-radius: 4px; font-size: 0.8em; max-height: 200px; overflow-y: auto; display: none; margin-top: 10px; white-space: pre-wrap; font-family: monospace; }
     </style>
@@ -22,38 +23,38 @@
 <body>
 
 <div class="container">
-    <h1>自動化標註流程</h1>
+    <h1>LLM文本標註</h1>
 
     <div class="config-section">
-        <strong>⚙️ 基本設定 (所有步驟共用)</strong>
-        <input type="password" id="geminiKey" placeholder="輸入使用者的 Gemini API Key">
-        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL 或 ID">
+        <strong>基本設定 (所有步驟共用)</strong>
+        <input type="password" id="geminiKey" placeholder="輸入工作坊提供的 Gemini API Key">
+        <input type="text" id="folderId" placeholder="輸入 Google Drive 資料夾 URL">
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 </div>
-        <button onclick="runWorkflow(1, 'Wocr')">執行步驟 1</button>
-        <div id="status1" class="status"></div>
+        <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
+        <button id="btn1" onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
+        <div id="status1" class="status">等待中...</div>
         <div id="result1" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">2</span> 資料初步分析</div>
-        <button onclick="runWorkflow(2, 'Wanalysis')">執行步驟 2</button>
+        <div class="step-title"><span class="step-number">2</span> 特徵抽取</div>
+        <button id="btn2" onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">3</span> 進階語義標註</div>
-        <button onclick="runWorkflow(3, 'Wannotation')">執行步驟 3</button>
+        <div class="step-title"><span class="step-number">3</span> 聚合拆分</div>
+        <button id="btn3" onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
 
     <div class="step-card">
-        <div class="step-title"><span class="step-number">4</span> 生成 HTML 報告與上傳</div>
-        <button onclick="runWorkflow(4, 'report')">執行步驟 4</button>
+        <div class="step-title"><span class="step-number">4</span> 生成索引網頁</div>
+        <button id="btn4" onclick="runWorkflow(4, 'report')">執行步驟 4</button>
         <div id="status4" class="status"></div>
         <div id="result4" class="result-preview"></div>
     </div>
@@ -67,19 +68,23 @@
         const folderInput = document.getElementById('folderId').value;
         const statusEl = document.getElementById(`status${stepNum}`);
         const resultEl = document.getElementById(`result${stepNum}`);
+        const btnEl = document.getElementById(`btn${stepNum}`);
 
         if (!geminiKey || !folderInput) {
             alert('請填寫基本設定！');
             return;
         }
 
-        // 自動提取 ID (防止使用者貼上整個網址)
-        const folderId = folderInput.includes('folders/') ? folderInput.split('folders/')[1].split('?')[0] : folderInput;
+        const folderId = folderInput.includes('folders/')
+            ? folderInput.split('folders/')[1].split('?')[0]
+            : folderInput;
 
-        statusEl.innerText = "⏳ 正在檢查資料夾並執行...";
+        btnEl.disabled = true;
+        statusEl.innerText = "⏳ 正在啟動流程...";
         statusEl.style.color = "blue";
         resultEl.style.display = "none";
 
+        let data = {};
         try {
             const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
@@ -90,24 +95,130 @@
                 })
             });
 
-            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
 
-            if (data.status === "error") {
-                statusEl.innerText = "⚠️ " + data.message;
-                statusEl.style.color = "red";
-                alert(data.message);
-            } else {
-                statusEl.innerText = "✅ 執行完成！";
-                statusEl.style.color = "green";
-                
-                // 顯示回傳結果，方便檢查
-                resultEl.style.display = "block";
-                resultEl.innerText = JSON.stringify(data, null, 2);
+            const text = await response.text();
+            console.log("啟動流程回應:", text);
+
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    console.warn("回應不是 JSON，但流程可能已啟動");
+                }
             }
         } catch (error) {
-            statusEl.innerText = "❌ 連線失敗，請確認 ngrok 是否開啟以及 n8n 是否有點擊 Listen";
+            console.error("【啟動主流程失敗】", error);
+            statusEl.innerText = "❌ 啟動失敗：" + error.message;
             statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
         }
+
+        if (data.status === "error") {
+            statusEl.innerText = "⚠️ " + (data.message || "流程啟動失敗");
+            statusEl.style.color = "red";
+            btnEl.disabled = false;
+            return;
+        }
+
+        // 步驟 4 使用同步的 Respond to Webhook（不寫入狀態表），
+        // 這裡的 fetch 已經是等流程跑完拿到的最終結果，不需要再輪詢查詢狀態
+        if (stepNum === 4) {
+            statusEl.innerText = "✅ 執行完成！";
+            statusEl.style.color = "green";
+            resultEl.style.display = "block";
+            resultEl.innerText = JSON.stringify(data, null, 2);
+            btnEl.disabled = false;
+            return;
+        }
+
+        statusEl.innerText = "⏳ 流程已啟動，正在執行中...";
+        statusEl.style.color = "blue";
+
+        try {
+            await pollStatus(folderId, stepNum, statusEl, resultEl);
+        } catch (error) {
+            console.error("【輪詢狀態失敗】", error);
+            statusEl.innerText = "❌ 查詢狀態失敗：" + error.message;
+            statusEl.style.color = "red";
+        } finally {
+            btnEl.disabled = false;
+        }
+    }
+
+    async function pollStatus(folderId, stepNum, statusEl, resultEl) {
+        const maxAttempts = 60;
+        let waitTime = 5000; // Supabase 沒有像 Google Sheets 那種嚴苛的每人每分鐘配額限制，可以查快一點
+
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+
+            let res;
+            try {
+                res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
+                });
+            } catch (error) {
+                console.error("查詢進度失敗:", error);
+                statusEl.innerText = `⚠️ 暫時無法取得進度（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
+                statusEl.style.color = "orange";
+                waitTime = Math.min(waitTime * 1.5, 20000);
+                continue;
+            }
+
+            const text = await res.text();
+            console.log("查詢進度回應:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("回應不是合法 JSON:", text);
+                waitTime = Math.min(waitTime * 1.5, 20000);
+                continue;
+            }
+
+            // Supabase 節點回傳的欄位是 snake_case（unique_key, processed_count, total_count, updated_at），
+            // 跟原本 Google Sheets 的 camelCase 不一樣，這裡改用 unique_key 精準比對
+            if (Array.isArray(data)) {
+                const targetKey = `${folderId}_step${stepNum}`;
+                const match = data.find(row => row.unique_key === targetKey);
+                data = match || { status: 'not_started' };
+            }
+
+            if (data.status === 'done') {
+                statusEl.innerText = "✅ 執行完成！";
+                statusEl.style.color = "green";
+                resultEl.style.display = "block";
+                resultEl.innerText = JSON.stringify(data, null, 2);
+                return;
+            }
+
+            if (data.status === 'error') {
+                statusEl.innerText = "❌ " + (data.message || "流程執行失敗");
+                statusEl.style.color = "red";
+                return;
+            }
+
+            const progress = (data.processed_count != null && data.total_count != null)
+                ? `（已處理 ${data.processed_count}/${data.total_count} 個檔案）`
+                : '';
+
+            statusEl.innerText = data.status
+                ? `⏳ 執行中 ${progress}（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`
+                : `⏳ 尚未偵測到執行紀錄...（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
+            statusEl.style.color = "blue";
+
+            waitTime = 5000;
+        }
+
+        statusEl.innerText = "⚠️ 已超過等待時間，請至 n8n 後台確認執行狀態";
+        statusEl.style.color = "orange";
     }
 </script>
 
