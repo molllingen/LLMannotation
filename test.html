@@ -158,7 +158,7 @@
 
             let res;
             try {
-                res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                res = await fetch(`${NGROK_BASE_URL}/webhook/get-status`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
