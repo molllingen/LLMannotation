@@ -88,7 +88,7 @@
 
         let data = {};
         try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -153,14 +153,14 @@
 
     async function pollStatus(folderId, stepNum, statusEl, resultEl) {
         const maxAttempts = 60;
-        let waitTime = 8000; // 起始輪詢間隔 8 秒，避免打爆 Google Sheets 讀取配額
+        let waitTime = 5000; // Supabase 沒有像 Google Sheets 那種嚴苛的每人每分鐘配額限制，可以查快一點
 
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(resolve => setTimeout(resolve, waitTime));
 
             let res;
             try {
-                res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
+                res = await fetch(`${NGROK_BASE_URL}/webhook/get-status`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
@@ -169,33 +169,27 @@
                 console.error("查詢進度失敗:", error);
                 statusEl.innerText = `⚠️ 暫時無法取得進度（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
                 statusEl.style.color = "orange";
-                waitTime = Math.min(waitTime * 1.5, 30000);
+                waitTime = Math.min(waitTime * 1.5, 20000);
                 continue;
             }
 
             const text = await res.text();
             console.log("查詢進度回應:", text);
 
-            if (text.includes('Quota exceeded') || text.includes('too many requests')) {
-                statusEl.innerText = `⏳ 系統忙碌中，正在排隊查詢...（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
-                statusEl.style.color = "orange";
-                waitTime = Math.min(waitTime * 1.5, 30000);
-                continue;
-            }
-
             let data;
             try {
                 data = JSON.parse(text);
             } catch (e) {
                 console.error("回應不是合法 JSON:", text);
-                waitTime = Math.min(waitTime * 1.5, 30000);
+                waitTime = Math.min(waitTime * 1.5, 20000);
                 continue;
             }
 
-            // 用 uniqueKey 精準比對，找出真正屬於這次查詢的那一筆
+            // Supabase 節點回傳的欄位是 snake_case（unique_key, processed_count, total_count, updated_at），
+            // 跟原本 Google Sheets 的 camelCase 不一樣，這裡改用 unique_key 精準比對
             if (Array.isArray(data)) {
-                const targetKey = `${folderId}_lead${stepNum}`;
-                const match = data.find(row => row.uniqueKey === targetKey);
+                const targetKey = `${folderId}_step${stepNum}`;
+                const match = data.find(row => row.unique_key === targetKey);
                 data = match || { status: 'not_started' };
             }
 
@@ -213,8 +207,8 @@
                 return;
             }
 
-            const progress = (data.processedCount != null && data.totalCount != null)
-                ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
+            const progress = (data.processed_count != null && data.total_count != null)
+                ? `（已處理 ${data.processed_count}/${data.total_count} 個檔案）`
                 : '';
 
             statusEl.innerText = data.status
@@ -222,7 +216,7 @@
                 : `⏳ 尚未偵測到執行紀錄...（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
             statusEl.style.color = "blue";
 
-            waitTime = 8000;
+            waitTime = 5000;
         }
 
         statusEl.innerText = "⚠️ 已超過等待時間，請至 n8n 後台確認執行狀態";
