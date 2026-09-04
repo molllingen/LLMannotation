@@ -23,8 +23,10 @@
 <body>
 
 <div class="container">
-    <h1>LLM文本標註</h1>
-
+    <h1>LLM文本標註測試</h1>
+    <p style="text-align:center; color:#c0392b; font-weight:bold; margin-top:-10px; margin-bottom:20px;">
+        網頁調整中...
+    </p>
     <div class="config-section">
         <strong>基本設定 (所有步驟共用)</strong>
         <input type="password" id="geminiKey" placeholder="輸入工作坊提供的 Gemini API Key">
@@ -33,21 +35,21 @@
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">1</span> 檔案搜尋與 OCR</div>
-        <button id="btn1" onclick="runWorkflow(1, 'step1')">執行步驟 1</button>
+        <button id="btn1" onclick="runWorkflow(1, 'ocr')">執行步驟 1</button>
         <div id="status1" class="status">等待中...</div>
         <div id="result1" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">2</span> 特徵抽取</div>
-        <button id="btn2" onclick="runWorkflow(2, 'step2')">執行步驟 2</button>
+        <button id="btn2" onclick="runWorkflow(2, 'analysis')">執行步驟 2</button>
         <div id="status2" class="status"></div>
         <div id="result2" class="result-preview"></div>
     </div>
 
     <div class="step-card">
         <div class="step-title"><span class="step-number">3</span> 聚合拆分</div>
-        <button id="btn3" onclick="runWorkflow(3, 'step3')">執行步驟 3</button>
+        <button id="btn3" onclick="runWorkflow(3, 'annotation')">執行步驟 3</button>
         <div id="status3" class="status"></div>
         <div id="result3" class="result-preview"></div>
     </div>
@@ -86,7 +88,7 @@
 
         let data = {};
         try {
-            const response = await fetch(`${NGROK_BASE_URL}/webhook-test/${path}`, {
+            const response = await fetch(`${NGROK_BASE_URL}/webhook/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -151,14 +153,14 @@
 
     async function pollStatus(folderId, stepNum, statusEl, resultEl) {
         const maxAttempts = 60;
-        let waitTime = 5000; // Supabase 沒有像 Google Sheets 那種嚴苛的每人每分鐘配額限制，可以查快一點
+        let waitTime = 8000; // 起始輪詢間隔 8 秒，避免打爆 Google Sheets 讀取配額
 
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(resolve => setTimeout(resolve, waitTime));
 
             let res;
             try {
-                res = await fetch(`${NGROK_BASE_URL}/webhook/get-status`, {
+                res = await fetch(`${NGROK_BASE_URL}/webhook/check-status`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ google_folder_id: folderId, step: stepNum })
@@ -167,27 +169,33 @@
                 console.error("查詢進度失敗:", error);
                 statusEl.innerText = `⚠️ 暫時無法取得進度（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
                 statusEl.style.color = "orange";
-                waitTime = Math.min(waitTime * 1.5, 20000);
+                waitTime = Math.min(waitTime * 1.5, 30000);
                 continue;
             }
 
             const text = await res.text();
             console.log("查詢進度回應:", text);
 
+            if (text.includes('Quota exceeded') || text.includes('too many requests')) {
+                statusEl.innerText = `⏳ 系統忙碌中，正在排隊查詢...（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
+                statusEl.style.color = "orange";
+                waitTime = Math.min(waitTime * 1.5, 30000);
+                continue;
+            }
+
             let data;
             try {
                 data = JSON.parse(text);
             } catch (e) {
                 console.error("回應不是合法 JSON:", text);
-                waitTime = Math.min(waitTime * 1.5, 20000);
+                waitTime = Math.min(waitTime * 1.5, 30000);
                 continue;
             }
 
-            // Supabase 節點回傳的欄位是 snake_case（unique_key, processed_count, total_count, updated_at），
-            // 跟原本 Google Sheets 的 camelCase 不一樣，這裡改用 unique_key 精準比對
+            // 用 uniqueKey 精準比對，找出真正屬於這次查詢的那一筆
             if (Array.isArray(data)) {
-                const targetKey = `${folderId}_step${stepNum}`;
-                const match = data.find(row => row.unique_key === targetKey);
+                const targetKey = `${folderId}_lead${stepNum}`;
+                const match = data.find(row => row.uniqueKey === targetKey);
                 data = match || { status: 'not_started' };
             }
 
@@ -205,8 +213,8 @@
                 return;
             }
 
-            const progress = (data.processed_count != null && data.total_count != null)
-                ? `（已處理 ${data.processed_count}/${data.total_count} 個檔案）`
+            const progress = (data.processedCount != null && data.totalCount != null)
+                ? `（已處理 ${data.processedCount}/${data.totalCount} 個檔案）`
                 : '';
 
             statusEl.innerText = data.status
@@ -214,7 +222,7 @@
                 : `⏳ 尚未偵測到執行紀錄...（已等待約 ${Math.round((i + 1) * waitTime / 1000)} 秒）`;
             statusEl.style.color = "blue";
 
-            waitTime = 5000;
+            waitTime = 8000;
         }
 
         statusEl.innerText = "⚠️ 已超過等待時間，請至 n8n 後台確認執行狀態";
